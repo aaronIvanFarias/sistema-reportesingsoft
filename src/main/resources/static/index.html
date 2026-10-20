@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Generador de Reportes de Ventas</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light p-4">
+    <div class="container bg-white p-5 rounded shadow" style="max-width: 700px;">
+        <h2 class="mb-4 text-primary">📊 Sistema de Generación de Reportes</h2>
+        
+        <form id="reportForm" class="mb-4">
+            <div class="row mb-3">
+                <div class="col">
+                    <label class="form-label">Fecha Inicio:</label>
+                    <input type="date" id="startDate" class="form-control" value="2025-01-01" required>
+                </div>
+                <div class="col">
+                    <label class="form-label">Fecha Fin:</label>
+                    <input type="date" id="endDate" class="form-control" value="2025-12-31" required>
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary w-100">Solicitar Reporte</button>
+        </form>
+
+        <div id="statusCard" class="card d-none">
+            <div class="card-body">
+                <h5 class="card-title">Estado del Reporte <span id="reportId" class="badge bg-secondary"></span></h5>
+                <p><strong>Estado:</strong> <span id="reportStatus" class="badge bg-warning">queued</span></p>
+                <p><strong>Filas Exportadas:</strong> <span id="exportedRows">-</span></p>
+                <p><strong>Intentos:</strong> <span id="retryCount">0</span></p>
+                <p id="errorMsg" class="text-danger d-none"></p>
+                
+                <a id="downloadBtn" href="#" class="btn btn-success d-none" target="_blank">📥 Descargar CSV</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let pollInterval;
+
+        document.getElementById('reportForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+
+            const res = await fetch('/reports', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ startDate, endDate })
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                document.getElementById('statusCard').classList.remove('d-none');
+                document.getElementById('reportId').innerText = '#' + data.id;
+                checkStatus(data.id);
+                if (pollInterval) clearInterval(pollInterval);
+                pollInterval = setInterval(() => checkStatus(data.id), 2000);
+            } else {
+                alert('Error al solicitar reporte');
+            }
+        });
+
+        async function checkStatus(id) {
+            const res = await fetch('/reports/' + id);
+            if (res.ok) {
+                const data = await res.json();
+                document.getElementById('reportStatus').innerText = data.status;
+                document.getElementById('retryCount').innerText = data.retryCount;
+                document.getElementById('exportedRows').innerText = data.exportedRows || '-';
+
+                if (data.status === 'completed') {
+                    document.getElementById('reportStatus').className = 'badge bg-success';
+                    document.getElementById('downloadBtn').classList.remove('d-none');
+                    document.getElementById('downloadBtn').href = data.downloadUrl;
+                    clearInterval(pollInterval);
+                } else if (data.status === 'failed') {
+                    document.getElementById('reportStatus').className = 'badge bg-danger';
+                    document.getElementById('errorMsg').classList.remove('d-none');
+                    document.getElementById('errorMsg').innerText = data.errorMessage;
+                    clearInterval(pollInterval);
+                }
+            }
+        }
+    </script>
+</body>
+</html>
